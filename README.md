@@ -16,7 +16,7 @@ This project explores **image compression** through **Singular Value Decompositi
    - 3 algorithms will be tested for computing SVD:
      - **Jacobi algorithm**
      - **Lanczos algorithm**
-     - **Gram-Schmidt Orthogonalization**
+     - **Arnoldi iteration**
    - We will benchmark these algorithms to decide which one will serve as the base for applying parallelization.
 
 3. **Benchmark sequential versions**  
