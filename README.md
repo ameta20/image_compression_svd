@@ -30,6 +30,31 @@ This project explores **image compression** through **Singular Value Decompositi
 
 ---
 
+### Algorithms Characteristics
+
+#### 1. Jacobi Method
+- **Type:** Iterative diagonalization algorithm  
+- **Matrix type:** Works on any real matrix  
+- **Characteristics:**
+  - It produces full SVD  
+  - **Computationally expensive** O(n³) complexity
+
+#### 2. Lanczos Algorithm
+- **Type:** Iterative projection method (Krylov subspace)  
+- **Matrix type:** Designed for symmetric matrices (applied to AᵀA for SVD), not directly to A  
+- **Characteristics:** 
+  - Produces good approximations of dominant singular values/vectors  
+  - **Parallelizable**: matrix–vector multiplications
+
+#### 3. Gram-Schmidt Orthogonalization
+- **Type:** Orthogonalization process (basis generation)  
+- **Matrix type:** Any full-rank matrix  
+- **Characteristics:**
+  - Simple, but **numerically unstable** for large matrices  
+  - Not a complete SVD algorithm by itself, it is used in **QR decomposition**
+
+---
+
 ## Current Stage
 We are currently:
 - Implementing and testing different **SVD algorithms** in their **sequential** versions.  
