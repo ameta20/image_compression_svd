@@ -1,114 +1,120 @@
 import numpy as np
 
+def svd_jacobi(M, eps=1.0e-15):
+    """
+    One-sided Jacobi SVD of matrix M (m x n).
 
-def svd_jacobi(M):
-    DBL_EPSILON = 1.0e-15  # approximately
-    A = np.copy(M)  # working copy U
-    m = len(A)
-    n = len(A[0])
+    Returns:
+        U  : (m x r) left singular vectors
+        s  : (r,)    singular values (not explicitly sorted)
+        Vh : (r x n) right singular vectors (Hermitian transpose)
+    """
+    A = M.astype(float).copy()
+    m, n = A.shape
 
-    Q = np.eye(n)  # working copy V
-    t = np.zeros(n)  # working copy s
+    # working right singular vectors (V)
+    V = np.eye(n)
+    # working singular values / error estimates
+    t = np.zeros(n)
 
-    # init counters
+    # heuristics mimicking the original code
+    DBL_EPSILON = eps
+    tolerance = 10.0 * m * DBL_EPSILON
+    sweep_max = max(5 * n, 12)
+
+    # initial column error estimates
+    for j in range(n):
+        cj = A[:, j]
+        t[j] = DBL_EPSILON * np.linalg.norm(cj)
+
     count = 1
     sweep = 0
-    sweep_max = max(5 * n, 12)  # heuristic
 
-    tolerance = 10 * m * DBL_EPSILON  # heuristic
-    # store the column error estimates in t
-    for j in range(n):
-        cj = A[:, j]  # get col j
-        sj = np.linalg.norm(cj)
-        t[j] = DBL_EPSILON * sj
+    # main Jacobi sweeps
+    while count > 0 and sweep <= sweep_max:
+        count = n * (n - 1) // 2
 
-    # orthogonalize A by plane rotations
-    while (count > 0 and sweep <= sweep_max):
-        # initialize rotation counter
-        count = n * (n - 1) / 2;
         for j in range(n - 1):
             for k in range(j + 1, n):
                 cj = A[:, j]
                 ck = A[:, k]
-                p = 2 * np.dot(cj, ck)
+
+                p = 2.0 * np.dot(cj, ck)
                 a = np.linalg.norm(cj)
                 b = np.linalg.norm(ck)
 
-                # test for columns j,k orthogonal,
-                # or dominant errors
+                q = a * a - b * b
+                v = np.hypot(p, q)  # sqrt(p^2 + q^2) safely
+
                 abserr_a = t[j]
                 abserr_b = t[k]
 
-                q = (a * a) - (b * b)
-                v = np.sqrt(p ** 2 + q ** 2)  # hypot()
-
-                sorted = (a >= b)
+                sorted_cols = (a >= b)
                 orthog = (abs(p) <= tolerance * (a * b))
                 noisya = (a < abserr_a)
                 noisyb = (b < abserr_b)
 
-                if sorted and (orthog or \
-                               noisya or noisyb):
+                # skip rotation if already orthogonal or dominated by noise
+                if sorted_cols and (orthog or noisya or noisyb):
                     count -= 1
                     continue
 
-                # calculate rotation angles
-                if v == 0 or sorted == False:
-                    cosine = 0.0
-                    sine = 1.0
+                # compute rotation (cosine, sine)
+                if v == 0.0 or not sorted_cols:
+                    c = 0.0
+                    s_val = 1.0
                 else:
-                    cosine = np.sqrt((v + q) / (2.0 * v))
-                    sine = p / (2.0 * v * cosine)
+                    c = np.sqrt((v + q) / (2.0 * v))
+                    s_val = p / (2.0 * v * c)
 
-                # apply rotation to A (U)
-                for i in range(m):
-                    Aik = A[i][k]
-                    Aij = A[i][j]
-                    A[i][j] = Aij * cosine + Aik * sine
-                    A[i][k] = -Aij * sine + Aik * cosine
+                # apply rotation to columns j,k of A
+                A_j = A[:, j].copy()
+                A_k = A[:, k].copy()
+                A[:, j] = c * A_j + s_val * A_k
+                A[:, k] = -s_val * A_j + c * A_k
 
-                # update singular values
-                t[j] = abs(cosine) * abserr_a + abs(sine) * abserr_b
-                t[k] = abs(sine) * abserr_a + abs(cosine) * abserr_b
+                # update error estimates
+                t[j] = abs(c) * abserr_a + abs(s_val) * abserr_b
+                t[k] = abs(s_val) * abserr_a + abs(c) * abserr_b
 
-                # apply rotation to Q (V)
-                for i in range(n):
-                    Qij = Q[i][j]
-                    Qik = Q[i][k]
-                    Q[i][j] = Qij * cosine + Qik * sine
-                    Q[i][k] = -Qij * sine + Qik * cosine
+                # apply same rotation to V (right singular vectors)
+                V_j = V[:, j].copy()
+                V_k = V[:, k].copy()
+                V[:, j] = c * V_j + s_val * V_k
+                V[:, k] = -s_val * V_j + c * V_k
 
         sweep += 1
-    # while
 
-    # compute singular values
+    # compute singular values and normalize columns of A → U
+    s = np.zeros(n)
     prev_norm = -1.0
+
     for j in range(n):
-        column = A[:, j]  # by ref
-        norm = np.linalg.norm(column)
-        # determine if singular value is zero
-        if norm == 0.0 or prev_norm == 0.0 or \
-                (j > 0 and norm < tolerance * prev_norm):
-            t[j] = 0.0
-            for i in range(len(column)):
-                column[i] = 0.0  # updates A indirectly
+        col = A[:, j]
+        norm = np.linalg.norm(col)
+
+        if norm == 0.0 or prev_norm == 0.0 or (j > 0 and norm <= tolerance * prev_norm):
+            s[j] = 0.0
+            A[:, j] = 0.0
             prev_norm = 0.0
         else:
-            t[j] = norm
-            for i in range(len(column)):
-                column[i] = column[i] * (1.0 / norm)
+            s[j] = norm
+            A[:, j] /= norm
             prev_norm = norm
 
     if count > 0:
-        print("Jacobi iterations no converge")
+        print("Warning: Jacobi iterations did not fully converge")
 
-    U = A  # mxn
-    s = t
-    Vh = np.transpose(Q)
+    U = A
+    Vh = V.T
 
     if m < n:
-        U = U[:, 0:m]
-        s = t[0:m]
-        Vh = Vh[0:m, :]
+        U = U[:, :m]
+        s = s[:m]
+        Vh = Vh[:m, :]
 
     return U, s, Vh
+
+
+def reconstruct_from_svd(U, s, Vh):
+    return U @ np.diag(s) @ Vh
