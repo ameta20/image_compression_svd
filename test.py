@@ -1,61 +1,74 @@
-from algorithms import gram_schmidt_general as gs
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 
-def main():
-    np.set_printoptions(precision=4, suppress=True, floatmode='fixed')
+from algorithms.svd_jacobi import svd_jacobi, reconstruct_from_svd
 
-    # Example matrix
+
+def test_small_matrix():
+    np.set_printoptions(precision=4, suppress=True)
+
+    print("\n====================== SMALL MATRIX TEST (JACOBI) ======================")
+
     A = np.array([
-        [1, 2, 4],
-        [5, 3, 8],
-        [7, 8, 10],
-        [9, 2, 7]], dtype=float)
+        [1., 2., 4.],
+        [5., 3., 8.],
+        [7., 8., 10.],
+        [9., 2., 7.]
+    ])
 
-    print("\nSource matrix:\n", A)
+    print("\nSource A:\n", A)
 
-    # Run SVD from scratch
-    U, S, Vh = gs.svd_gram_schmidt_power(A)
+    # Compute SVD via Jacobi
+    U, S, Vh = svd_jacobi(A)
 
-    print("\nU =\n", U)
-    print("\nSingular values S =\n", S)
-    print("\nVh =\n", Vh)
+    print("\nJacobi SVD U:\n", U)
+    print("\nJacobi singular values S:\n", S)
+    print("\nJacobi Vh:\n", Vh)
 
-    # Reconstruct the matrix
-    A_reconstructed = U @ np.diag(S) @ Vh
-    print("\nReconstructed A =\n", A_reconstructed)
-    print("Reconstruction error (Frobenius norm):", np.linalg.norm(A - A_reconstructed))
+    A_rec = reconstruct_from_svd(U, S, Vh)
+    print("\nReconstructed A:\n", A_rec)
+    print("Reconstruction error:", np.linalg.norm(A - A_rec))
 
-    # Compare with NumPy's SVD
+    # Compare with NumPy
     U_np, S_np, Vh_np = np.linalg.svd(A, full_matrices=False)
-    print("\nNumPy SVD reconstruction error:", np.linalg.norm(A - U_np @ np.diag(S_np) @ Vh_np))
-    print("Difference in singular values:", np.linalg.norm(S - S_np))
+    A_np_rec = U_np @ np.diag(S_np) @ Vh_np
+
+    print("\nNumPy SVD reconstruction error:", np.linalg.norm(A - A_np_rec))
+    print("Difference in singular values:", np.linalg.norm(S - S_np[:len(S)]))
 
 
+def test_image_compression():
+    print("IMAGE COMPRESSION TEST (JACOBI)\n")
 
-if __name__ == "__main__":
-    A = np.array(Image.open("images/test_img.jpg").convert("L"), dtype=float)
-    A = A / 255.0  # normalize to [0,1]
+    img = Image.open("images/test_img.jpg").convert("L")
+    A = np.array(img, dtype=float) / 255.0
 
-    ks = [5, 20, 50, 100, 250]
+    ranks = [5, 20, 50, 100, 200]
 
     plt.figure(figsize=(15, 6))
-    plt.subplot(1, len(ks) + 1, 1)
+    plt.subplot(1, len(ranks) + 1, 1)
     plt.imshow(A, cmap='gray')
-    plt.title('Original')
+    plt.title("Original")
     plt.axis('off')
 
-    # -------------------------
-    # Reconstruct for different k
-    # -------------------------
-    for i, k in enumerate(ks):
-        U, S, Vh = gs.svd_gram_schmidt_power(A, k)
-        A_k = gs.reconstruct_image(U, S, Vh)
-        plt.subplot(1, len(ks) + 1, i + 2)
+    for i, k in enumerate(ranks):
+        print(f"Computing rank k={k} Jacobi SVD...")
+        U, S, Vh = svd_jacobi(A)
+        S_k = S[:k]        # keep first k singular values
+        U_k = U[:, :k]
+        Vh_k = Vh[:k, :]
+        A_k = reconstruct_from_svd(U_k, S_k, Vh_k)
+
+        plt.subplot(1, len(ranks) + 1, i + 2)
         plt.imshow(A_k, cmap='gray')
-        plt.title(f'k={k}')
+        plt.title(f"k={k}")
         plt.axis('off')
 
     plt.tight_layout()
     plt.show()
+
+
+if __name__ == "__main__":
+    test_small_matrix()
+    test_image_compression()
