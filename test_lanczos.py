@@ -46,7 +46,7 @@ def test_small_matrix():
 def test_image_compression():
     print("\n==================== Image Compression Test ====================")
 
-    img_path = "images/test_img.jpg"
+    img_path = "images/img_300.jpg"
     if not os.path.exists(img_path):
         print(f"Image not found: {img_path}")
         return

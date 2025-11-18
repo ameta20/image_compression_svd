@@ -41,7 +41,7 @@ def test_small_matrix():
 def test_image_compression():
     print("IMAGE COMPRESSION TEST (JACOBI)\n")
 
-    img = Image.open("images/test_img.jpg").convert("L")
+    img = Image.open("images/img_300.jpg").convert("L")
     A = np.array(img, dtype=float) / 255.0
 
     ranks = [5, 20, 50, 100, 200]
