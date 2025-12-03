@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 import time
-from algorithms.svd_golub_kahan_v2 import svd_golub_kahan_full, reconstruct
+from algorithms.svd_golub_kahan import svd_golub_kahan_full, reconstruct
 
 
 def test_svd_on_image(image_path, ranks_to_test):
@@ -56,7 +56,7 @@ def test_svd_on_image(image_path, ranks_to_test):
 
 
 if __name__ == "__main__":
-    IMAGE_FILE_PATH = 'images/cat_img.jpg'
+    IMAGE_FILE_PATH = 'images/img_300.jpg'
 
     RANKS = [5, 15, 30, 50, 100]
 
