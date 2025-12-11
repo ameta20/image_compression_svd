@@ -1,11 +1,10 @@
 import numpy as np
 import math
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 
 def _householder_vector(x: np.ndarray) -> np.ndarray:
-    """
-    Compute Householder vector v
-    """
+
     x = x.astype(float)
     norm_x = np.linalg.norm(x)
     if norm_x == 0.0:
@@ -187,3 +186,19 @@ if __name__ == "__main__":
         A_rec = reconstruct(U, S, Vt)
         rel_err = np.linalg.norm(A - A_rec) / np.linalg.norm(A)
         print(f"Relative reconstruction error: {rel_err:.2e}")
+
+def compress_image(A, k):
+
+    # Run SVD
+    U, S, Vt = svd_golub_kahan_full(A)
+
+    # Reconstruct using built-in function
+    A_rec = reconstruct(U, S, Vt, k)
+
+    # Compute metrics
+    err = np.linalg.norm(A - A_rec)
+    rel = err / np.linalg.norm(A)
+    psnr = peak_signal_noise_ratio(A, A_rec, data_range=1.0)
+    ssim = structural_similarity(A, A_rec, data_range=1.0)
+
+    return A_rec, err, rel, psnr, ssim
