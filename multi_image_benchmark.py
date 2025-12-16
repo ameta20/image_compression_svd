@@ -14,8 +14,9 @@ from algorithms.svd_golub_kahan_parallelised import compress_image_parallelised
 # --------------------------------------------------
 # CONFIG
 # --------------------------------------------------
-number_of_images = 15
+number_of_images = 4
 image_seed = 42
+image_size = 256
 
 cpu_samples = []
 monitoring = False
@@ -73,10 +74,12 @@ def process_single_image(args):
     A = load_image(img_path)
 
     # Resize to fixed size for fair comparison
-    A = np.array(Image.fromarray((A * 255).astype(np.uint8)).resize((128, 128))) / 255.0
+    A = np.array(Image.fromarray((A * 255).astype(np.uint8)).resize((image_size, image_size))) / 255.0
 
+    t0 = time.time()
     A_rec, err, rel, psnr, ssim = compress_image(A, k)
-    return img_path, k, A_rec, err, rel, psnr, ssim
+    img_time = time.time() - t0
+    return img_path, k, A_rec, err, rel, psnr, ssim, img_time
 
 
 def process_single_image_parallelised(args):
@@ -88,10 +91,12 @@ def process_single_image_parallelised(args):
     A = load_image(img_path)
 
     # Same resize as baseline to keep things comparable
-    A = np.array(Image.fromarray((A * 255).astype(np.uint8)).resize((128, 128))) / 255.0
+    A = np.array(Image.fromarray((A * 255).astype(np.uint8)).resize((image_size, image_size))) / 255.0
 
+    t0 = time.time()
     A_rec, err, rel, psnr, ssim = compress_image_parallelised(A, k)
-    return img_path, k, A_rec, err, rel, psnr, ssim
+    img_time = time.time() - t0
+    return img_path, k, A_rec, err, rel, psnr, ssim, img_time
 
 
 # --------------------------------------------------
@@ -102,12 +107,14 @@ def benchmark_images_sequential(images, k, df):
 
     for img_path in images:
         A = load_image(img_path)
-        A = np.array(Image.fromarray((A * 255).astype(np.uint8)).resize((128, 128))) / 255.0
+        A = np.array(Image.fromarray((A * 255).astype(np.uint8)).resize((image_size, image_size))) / 255.0
         img_name = os.path.splitext(os.path.basename(img_path))[0]
 
         print(f"Sequential: Processing {img_name}")
 
+        t_img = time.time()
         A_rec, err, rel, psnr, ssim = compress_image(A, k)
+        img_time = time.time() - t_img
 
         save_path = f"results/compressed_images/parallel_benchmark/{img_name}_k{k}_seq.jpg"
         save_image(A_rec, save_path)
@@ -116,11 +123,46 @@ def benchmark_images_sequential(images, k, df):
             img_name,
             "sequential",
             k,
-            err, rel, psnr, ssim
+            err, rel, psnr, ssim,
+            img_time
         ]
 
     total_time = time.time() - start
     print(f"\nTotal sequential runtime: {total_time:.3f} seconds\n")
+
+    return total_time, df
+
+
+# --------------------------------------------------
+# SEQUENTIAL benchmark (Numba-parallelised compress_image_parallelised)
+# --------------------------------------------------
+def benchmark_images_sequential_numba(images, k, df):
+    start = time.time()
+
+    for img_path in images:
+        A = load_image(img_path)
+        A = np.array(Image.fromarray((A * 255).astype(np.uint8)).resize((image_size, image_size))) / 255.0
+        img_name = os.path.splitext(os.path.basename(img_path))[0]
+
+        print(f"Sequential (Numba): Processing {img_name}")
+
+        t_img = time.time()
+        A_rec, err, rel, psnr, ssim = compress_image_parallelised(A, k)
+        img_time = time.time() - t_img
+
+        save_path = f"results/compressed_images/parallel_benchmark/{img_name}_k{k}_seq_numba.jpg"
+        save_image(A_rec, save_path)
+
+        df.loc[len(df)] = [
+            img_name,
+            "sequential_numba",
+            k,
+            err, rel, psnr, ssim,
+            img_time
+        ]
+
+    total_time = time.time() - start
+    print(f"\nTotal sequential (Numba) runtime: {total_time:.3f} seconds\n")
 
     return total_time, df
 
@@ -141,7 +183,7 @@ def benchmark_images_parallel(images, k, df):
 
     print(f"\nTotal parallel runtime (baseline)   : {total_time:.3f} seconds\n")
 
-    for img_path, k_val, A_rec, err, rel, psnr, ssim in results:
+    for img_path, k_val, A_rec, err, rel, psnr, ssim, img_time in results:
         img_name = os.path.splitext(os.path.basename(img_path))[0]
 
         save_path = f"results/compressed_images/parallel_benchmark/{img_name}_k{k_val}_parallel_baseline.jpg"
@@ -151,7 +193,8 @@ def benchmark_images_parallel(images, k, df):
             img_name,
             "parallel_baseline",
             k_val,
-            err, rel, psnr, ssim
+            err, rel, psnr, ssim,
+            img_time
         ]
 
     return total_time, df
@@ -173,7 +216,7 @@ def benchmark_images_parallel_numba(images, k, df):
 
     print(f"\nTotal parallel runtime (Numba)      : {total_time:.3f} seconds\n")
 
-    for img_path, k_val, A_rec, err, rel, psnr, ssim in results:
+    for img_path, k_val, A_rec, err, rel, psnr, ssim, img_time in results:
         img_name = os.path.splitext(os.path.basename(img_path))[0]
 
         save_path = f"results/compressed_images/parallel_benchmark/{img_name}_k{k_val}_parallel_numba.jpg"
@@ -183,7 +226,8 @@ def benchmark_images_parallel_numba(images, k, df):
             img_name,
             "parallel_numba",
             k_val,
-            err, rel, psnr, ssim
+            err, rel, psnr, ssim,
+            img_time
         ]
 
     return total_time, df
@@ -206,7 +250,7 @@ def run_all_benchmarks():
     df = pd.DataFrame(columns=[
         "Image", "Mode", "k",
         "Abs Error", "Rel Error",
-        "PSNR", "SSIM"
+        "PSNR", "SSIM", "Time (s)"
     ])
 
     # --------------------------------------------------
@@ -233,6 +277,12 @@ def run_all_benchmarks():
     effective_cores = (avg_cpu / 100) * num_cores
 
     # --------------------------------------------------
+    # 2.5) Sequential (Numba-parallelised compress_image_parallelised)
+    # --------------------------------------------------
+    print("\nRUNNING SEQUENTIAL BENCHMARK (Numba-parallelised compress_image)")
+    seq_numba_time, df = benchmark_images_sequential_numba(images, k, df)
+
+    # --------------------------------------------------
     # 3) Multi-image parallel (Numba-parallelised SVD)
     #    → if you want to temporarily skip this, just comment
     #      the next two lines.
@@ -243,18 +293,22 @@ def run_all_benchmarks():
     # --------------------------------------------------
     # Speedups
     # --------------------------------------------------
-    speedup_parallel = seq_time / par_time if par_time > 0 else None
-    speedup_numba   = seq_time / par_numba_time if par_numba_time > 0 else None
+    speedup_parallel    = seq_time / par_time if par_time > 0 else None
+    speedup_numba       = seq_time / par_numba_time if par_numba_time > 0 else None
+    speedup_seq_numba   = seq_time / seq_numba_time if seq_numba_time > 0 else None
 
     print(f"\nAvailable CPU cores          : {num_cores}")
     print(f"Average CPU utilization (par): {avg_cpu:.1f}%")
     print(f"Estimated cores utilized     : {effective_cores:.2f}")
 
     print(f"\nSequential time              = {seq_time:.3f}s")
+    print(f"Sequential Numba time        = {seq_numba_time:.3f}s")
     print(f"Parallel baseline time       = {par_time:.3f}s")
     print(f"Parallel Numba time          = {par_numba_time:.3f}s")
+    print("---------------------------------------------------------")
+    print(f"Speedup (Numba sequential)   = {speedup_seq_numba:.2f}x")
     print(f"Speedup (baseline parallel)  = {speedup_parallel:.2f}x")
-    print(f"Speedup (Numba parallel)     = {speedup_numba:.2f}x\n")
+    print(f"Speedup (Numba parallel)     = {speedup_numba:.2f}x")
 
     df.to_csv("results/benchmark_results_comparison.csv", index=False)
 
