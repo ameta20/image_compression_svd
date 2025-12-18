@@ -11,10 +11,9 @@ import psutil
 from algorithms.svd_golub_kahan_v2 import compress_image
 from algorithms.svd_golub_kahan_parallelised import compress_image_parallelised
 
-# --------------------------------------------------
 # CONFIG
-# --------------------------------------------------
-number_of_images = 4
+number_of_images = 50
+no_procs = 3
 image_seed = 42
 image_size = 256
 
@@ -22,9 +21,7 @@ cpu_samples = []
 monitoring = False
 
 
-# --------------------------------------------------
-# CPU monitoring (for parallel benchmarks)
-# --------------------------------------------------
+# CPU monitoring for parallel benchmarks
 def monitor_cpu_usage(interval=0.2):
     global cpu_samples, monitoring
     monitoring = True
@@ -32,9 +29,7 @@ def monitor_cpu_usage(interval=0.2):
         cpu_samples.append(psutil.cpu_percent(interval=interval))
 
 
-# --------------------------------------------------
 # Image helpers
-# --------------------------------------------------
 def load_image(path):
     img = Image.open(path).convert("L")
     return np.array(img, dtype=float) / 255.0
@@ -63,9 +58,7 @@ def pick_random_images(folder="images", n=100, seed=42):
     return selected
 
 
-# --------------------------------------------------
 # Worker functions
-# --------------------------------------------------
 def process_single_image(args):
     """
     Worker using the baseline Golub–Kahan implementation (compress_image).
@@ -99,9 +92,7 @@ def process_single_image_parallelised(args):
     return img_path, k, A_rec, err, rel, psnr, ssim, img_time
 
 
-# --------------------------------------------------
 # SEQUENTIAL benchmark (baseline compress_image)
-# --------------------------------------------------
 def benchmark_images_sequential(images, k, df):
     start = time.time()
 
@@ -133,9 +124,7 @@ def benchmark_images_sequential(images, k, df):
     return total_time, df
 
 
-# --------------------------------------------------
 # SEQUENTIAL benchmark (Numba-parallelised compress_image_parallelised)
-# --------------------------------------------------
 def benchmark_images_sequential_numba(images, k, df):
     start = time.time()
 
@@ -167,9 +156,7 @@ def benchmark_images_sequential_numba(images, k, df):
     return total_time, df
 
 
-# --------------------------------------------------
 # PARALLEL benchmark (multi-image, baseline compress_image)
-# --------------------------------------------------
 def benchmark_images_parallel(images, k, df):
     print("\nIMAGE COMPRESSION BENCHMARK (MULTIPLE IMAGE IN PARALLEL, baseline Golub–Kahan)")
 
@@ -177,6 +164,7 @@ def benchmark_images_parallel(images, k, df):
     print(f"\nRunning {len(jobs)} parallel tasks (baseline)...\n")
 
     start = time.time()
+    # with Pool(processes=no_procs) as p:
     with Pool() as p:
         results = p.map(process_single_image, jobs)
     total_time = time.time() - start
@@ -200,9 +188,7 @@ def benchmark_images_parallel(images, k, df):
     return total_time, df
 
 
-# --------------------------------------------------
 # PARALLEL benchmark (multi-image, Numba-parallelised SVD)
-# --------------------------------------------------
 def benchmark_images_parallel_numba(images, k, df):
     print("\nIMAGE COMPRESSION BENCHMARK (MULTIPLE IMAGE IN PARALLEL, Numba-parallelised Golub–Kahan)")
 
@@ -210,6 +196,7 @@ def benchmark_images_parallel_numba(images, k, df):
     print(f"\nRunning {len(jobs)} parallel tasks (Numba-parallelised)...\n")
 
     start = time.time()
+    # with Pool(processes=no_procs) as p:
     with Pool() as p:
         results = p.map(process_single_image_parallelised, jobs)
     total_time = time.time() - start
@@ -233,9 +220,6 @@ def benchmark_images_parallel_numba(images, k, df):
     return total_time, df
 
 
-# --------------------------------------------------
-# MAIN controller
-# --------------------------------------------------
 def run_all_benchmarks():
     global monitoring
 
@@ -253,15 +237,11 @@ def run_all_benchmarks():
         "PSNR", "SSIM", "Time (s)"
     ])
 
-    # --------------------------------------------------
-    # 1) Sequential baseline
-    # --------------------------------------------------
+    # Sequential baseline
     print("\nRUNNING SEQUENTIAL BENCHMARK (baseline compress_image)")
     seq_time, df = benchmark_images_sequential(images, k, df)
 
-    # --------------------------------------------------
-    # 2) Multi-image parallel (baseline SVD)
-    # --------------------------------------------------
+    # Multi-image parallel (baseline SVD)
     cpu_samples.clear()
     monitor_thread = threading.Thread(target=monitor_cpu_usage, daemon=True)
     monitor_thread.start()
@@ -276,23 +256,16 @@ def run_all_benchmarks():
     avg_cpu = sum(cpu_samples) / len(cpu_samples) if cpu_samples else 0
     effective_cores = (avg_cpu / 100) * num_cores
 
-    # --------------------------------------------------
-    # 2.5) Sequential (Numba-parallelised compress_image_parallelised)
-    # --------------------------------------------------
+    # Sequential (Numba-parallelised compress_image_parallelised)
     print("\nRUNNING SEQUENTIAL BENCHMARK (Numba-parallelised compress_image)")
     seq_numba_time, df = benchmark_images_sequential_numba(images, k, df)
 
-    # --------------------------------------------------
-    # 3) Multi-image parallel (Numba-parallelised SVD)
-    #    → if you want to temporarily skip this, just comment
-    #      the next two lines.
-    # --------------------------------------------------
+    # Multi-image parallel (Numba-parallelised SVD)
+
     print("\nRUNNING MULTIPLE IMAGE AT A TIME BENCHMARK (Numba-parallelised)")
     par_numba_time, df = benchmark_images_parallel_numba(images, k, df)
 
-    # --------------------------------------------------
     # Speedups
-    # --------------------------------------------------
     speedup_parallel    = seq_time / par_time if par_time > 0 else None
     speedup_numba       = seq_time / par_numba_time if par_numba_time > 0 else None
     speedup_seq_numba   = seq_time / seq_numba_time if seq_numba_time > 0 else None
